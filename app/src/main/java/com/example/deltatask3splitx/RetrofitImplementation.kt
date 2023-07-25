@@ -19,9 +19,9 @@ class RetrofitImplementation
 {
     val Retrofit = RetrofitInstance.getInstance().create(HTTPRequestsInterface::class.java)
 
-    suspend fun createAccount(username: String, password: String)
+    suspend fun createAccount(username: String, password: String): Int?
     {
-        Retrofit.createUser(RegLogDataClass(name = username, password = password))
+        return Retrofit.createUser(RegLogDataClass(name = username, password = password)).body()?.userID
     }
 
     suspend fun loginValidation(username: String, password: String): Int?

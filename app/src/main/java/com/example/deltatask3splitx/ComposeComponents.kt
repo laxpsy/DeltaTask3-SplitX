@@ -70,6 +70,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import com.example.deltatask3splitx.retrofit.dataclasses.UserIdDataClassForSplitIDArray
@@ -79,7 +80,9 @@ import com.example.deltatask3splitx.ui.theme.FadedTeal
 import com.example.deltatask3splitx.ui.theme.HollowGreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.net.SocketTimeoutException
 
 
 val items = listOf("Split", "Profile", "History")
@@ -231,10 +234,11 @@ fun SplitComposable(
     username: String?,
     settled: List<Int>,
     splitID: Int,
-    userIDs: List<Int>
+    userIDs: List<Int>,
+   onClick: () -> Unit
 ) {
-
-    var settledMutable = remember{ mutableStateListOf<Int>()}
+    val usernameIndex = names.indexOf(username)
+    val settledMutable = remember{ mutableStateListOf<Int>()}
     for(i in settled)
     {
         settledMutable.add(i)
@@ -320,31 +324,40 @@ fun SplitComposable(
                                 id = 2
                             )
                         SplitXStandardText(
-                            text = if (name != origin) name
-                            else if(name == username) "$name\n(You)"
-                            else "$name\nI Paid!",
+                            text = /*if (name != origin) name
+                            else if (name == username) "$name\n(You)"
+                            else "$name\nI Paid!"*/
+                            when(name){
+                                origin -> if(username != origin) "$name\nI paid!" else "You\npaid!"
+                                username -> "$name (You)"
+                                else -> name},
                             fontSize = 15.sp,
                             fontWeight =
                             if (name != origin) FontWeight.Normal else FontWeight.Bold
                         )
                         SplitXStandardText(text = (currencyFormat.format(amount / names.size)).toString())
-                        ElevatedButton(onClick =
-                        {
-                            CoroutineScope(Dispatchers.IO).launch{
-                                retrofitImplementation.splitPatchRequest(splitID, userIDs[index])
-                                settledMutable.set(index, 1)
-                                println("Settled @ ${splitID}, for ${userIDs[index]}")
-                            }
-                        }, enabled = name!=username && settledMutable[index] == 0,
-                            modifier = Modifier.width(IntrinsicSize.Min))
-                        {
-                            SplitXStandardText(text = when(name)
+
+
+                        if (username != origin && (name == origin &&
+                                    settledMutable[index] == 0) || username == origin && name != username
+                        ) {
+                            ElevatedButton(
+                                onClick = onClick
+
+                                , enabled = username!= origin && settledMutable[usernameIndex] == 0,
+                                modifier = Modifier.width(IntrinsicSize.Min)
+                            )
                             {
-                                origin -> if(origin!=username)"Settle" else "You"
-                                username -> "You"
-                                else -> if(settledMutable[index] == 0) "Settle" else "Settled"
-                            }, fontSize = 12.sp)
-                        }
+                                SplitXStandardText(
+                                    text = when (name) {
+                                        origin -> if (origin != username && settledMutable[usernameIndex] == 0)
+                                            "Settle" else if (origin != username && settledMutable[usernameIndex] == 1)
+                                            "Settled" else "You"
+                                        else -> "Owes\nYou!"
+                                    }, fontSize = 12.sp
+                                )
+                            }
+                        } else{}
                     }
                 }
             }
@@ -520,7 +533,7 @@ fun ButtonPreview() {
     }
 }
 
-//@Preview(showBackground = true, uiMode = UI_MODE_NIGHT_YES)
+@Preview(showBackground = true, uiMode = UI_MODE_NIGHT_YES)
 @Composable
 fun SplitComposablePreview() {
     DeltaTask3SplitXTheme {
@@ -537,9 +550,8 @@ fun SplitComposablePreview() {
                     "NoritoshiKamo",
                     "AoiTodo",
                     "MakiZenin"
-                ), "GojoSatoru", "Laxpsy",
-                listOf(0, 0, 0, 0, 1, 0, 0, 1, 0, 0), 69, listOf()
-            )
+                ), "Laxpsy", "GojoSatoru",
+                listOf(0, 1, 0, 0, 1, 0, 0, 1, 0, 0), 69, listOf()){}
         }
     }
 }

@@ -146,7 +146,6 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
 
-
                     var regIfTrue by remember { mutableStateOf(true) }
                     var usernameState by remember { mutableStateOf("") }
                     var passwordState by remember { mutableStateOf("") }
@@ -224,16 +223,22 @@ class MainActivity : ComponentActivity() {
                             val exceptionHandler =
                                 CoroutineExceptionHandler { _, throwable -> throwable.printStackTrace() }
                             CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
-
+                                //userID -1 is reserved for wrong password, -2 is reserved for account created successfully
                                 if (usernameState.isBlank() || passwordState.isBlank()) {
                                     snackbarHostState.showSnackbar("Username/Password must be non-empty!")
                                 } else {
                                     if (!usernameState.contains(regex = Regex("[A-Z]"))) {
                                         snackbarHostState.showSnackbar("Username must contain at least one capital letter.")
                                     } else {
-                                        if (regIfTrue) RetrofitImplementation.createAccount(
-                                            usernameState.replace(" ", ""), passwordState
-                                        )
+                                        if (regIfTrue)
+                                            try {
+                                                userID = RetrofitImplementation.createAccount(
+                                                    usernameState.replace(" ", ""), passwordState
+                                                )
+                                            } catch (e: SocketTimeoutException) {
+                                                e.printStackTrace()
+                                                snackbarHostState.showSnackbar("Timeout!")
+                                            }
                                         else {
                                             withContext(Dispatchers.Default) {
                                                 try {
@@ -247,6 +252,8 @@ class MainActivity : ComponentActivity() {
                                             }
                                             if (userID == -1) {
                                                 snackbarHostState.showSnackbar("Please enter correct password!")
+                                            } else if (userID == -2) {
+                                                snackbarHostState.showSnackbar("Account created successfully")
                                             }
                                         }
 
@@ -312,7 +319,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(navController.currentBackStackEntry) {
                 try {
                     responseFromRetrofit = RetrofitImplementation.fetchUserNetSplitData(userID!!)
-                    if(responseFromRetrofit.body() != null) {
+                    if (responseFromRetrofit.body() != null) {
                         totalDetails = responseFromRetrofit.body()!!.userSplitAmountsArray
                         splitIDs = responseFromRetrofit.body()!!.userAllSplitsID
                     }
@@ -561,24 +568,37 @@ class MainActivity : ComponentActivity() {
     fun HistoryScreen(
         navController: NavController, username: String?, userID: Int?
     ) {
-        val listListUsernames = remember { mutableStateListOf((listOf<String>())) }
-        val listListUserIDs = remember { mutableStateListOf((listOf<Int>())) }
-        val listofAmounts = remember { mutableStateListOf<Int>() }
-        val listOfOriginNames = remember { mutableStateListOf<String?>() }
-        val listOfReasons = remember { mutableStateListOf<String?>() }
+        var listListUsernames = remember { mutableStateListOf<List<String>>() }
+        var listListUserIDs = remember { mutableStateListOf<List<Int>>() }
+        var listofAmounts = remember { mutableStateListOf<Int>() }
+        var listOfOriginNames = remember { mutableStateListOf<String?>() }
+        var listOfReasons = remember { mutableStateListOf<String?>() }
         var flag by remember { mutableStateOf(0) }
         var canNavigate by remember { mutableStateOf(false) }
-        val listListSettled = remember { mutableStateListOf((listOf<Int>())) }
+        var listListSettled = remember { mutableStateListOf<List<Int>>() }
         var timeoutFlag by remember { mutableStateOf(false) }
+        val snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
+
 
         //FAB TO RETRY FETCH
-        Scaffold(floatingActionButton = {
+        Scaffold(snackbarHost = { snackbarHostState }, floatingActionButton = {
             if (timeoutFlag)
                 SplitXFab {
                     CoroutineScope(Dispatchers.IO).launch {
                         splitIDs.forEachIndexed { index, it ->
 
                             try {
+                                //RESET VARIABLES
+                                listListUsernames = mutableStateListOf<List<String>>()
+                                listListUserIDs = mutableStateListOf<List<Int>>()
+                                listofAmounts = mutableStateListOf<Int>()
+                                listOfOriginNames = mutableStateListOf<String?>()
+                                listOfReasons = mutableStateListOf<String?>()
+                                flag = 0
+                                canNavigate = false
+                                listListSettled = mutableStateListOf<List<Int>>()
+                                timeoutFlag = false
+
                                 val response = RetrofitImplementation.getIndividualSplitDetails(it)
                                 if (response.body() != null) {
                                     listListUsernames.add(
@@ -597,7 +617,6 @@ class MainActivity : ComponentActivity() {
                                     listOfReasons.add(RetrofitImplementation.findReason(response)!!)
                                     listListSettled.add(RetrofitImplementation.findSettled(response))
                                     listListUserIDs.add(RetrofitImplementation.findIDs(response))
-                                    println("${it}, ${listListUsernames[index]}, ${listofAmounts[index]}, ${listOfOriginNames[index]}, @ ${index}")
                                     timeoutFlag = false
                                 }
                             } catch (e: SocketTimeoutException) {
@@ -622,6 +641,7 @@ class MainActivity : ComponentActivity() {
 
                         try {
                             val response = RetrofitImplementation.getIndividualSplitDetails(it)
+
                             if (response.body() != null) {
                                 listListUsernames.add(
                                     RetrofitImplementation.findNames(
@@ -639,7 +659,6 @@ class MainActivity : ComponentActivity() {
                                 listOfReasons.add(RetrofitImplementation.findReason(response)!!)
                                 listListSettled.add(RetrofitImplementation.findSettled(response))
                                 listListUserIDs.add(RetrofitImplementation.findIDs(response))
-                                println("${it}, ${listListUsernames[index]}, ${listofAmounts[index]}, ${listOfOriginNames[index]}, @ ${index}")
                             }
                         } catch (e: SocketTimeoutException) {
                             flag = 2
@@ -685,14 +704,37 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxWidth()
                             ) {
                                 itemsIndexed(splitIDs) { index: Int, item ->
-                                    SplitComposable(
-                                        purpose = listOfReasons[index]!!,
-                                        amount = listofAmounts[index],
-                                        names = listListUsernames[index + 1],
-                                        origin = listOfOriginNames[index],
-                                        username, listListSettled[index + 1],
-                                        splitIDs[index], listListUserIDs[index + 1]
+                                    if (index < listListSettled.size
+                                        && index < listOfReasons.size
+                                        && index < listofAmounts.size
+                                        && index < listListUsernames.size
+                                        && index < listOfOriginNames.size
                                     )
+                                        SplitComposable(
+                                            purpose = listOfReasons[index]!!,
+                                            amount = listofAmounts[index],
+                                            names = listListUsernames[index],
+                                            origin = listOfOriginNames[index],
+                                            username, listListSettled[index],
+                                            splitIDs[index], listListUserIDs[index]
+                                        ) {
+                                            try {
+                                                CoroutineScope(Dispatchers.IO).launch {
+                                                    retrofitImplementation.splitPatchRequest(
+                                                        splitIDs[index],
+                                                        userID!!
+                                                    )
+                                                    println("Settled @ ${splitIDs[index]}, for ${userID}")
+                                                }
+                                            } catch (e: SocketTimeoutException) {
+                                                CoroutineScope(Dispatchers.IO).launch {
+                                                    snackbarHostState.showSnackbar("Timeout!")
+                                                }
+                                            }
+                                        }
+                                    else {
+
+                                    }
                                 }
                             }
                         } else if (flag == 2) {
@@ -718,8 +760,6 @@ class MainActivity : ComponentActivity() {
                             userID = userID,
                             canNavigate = canNavigate
                         )
-
-
                     }
                 }
             }

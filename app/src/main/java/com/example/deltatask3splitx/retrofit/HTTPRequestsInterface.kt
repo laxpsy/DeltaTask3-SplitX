@@ -18,7 +18,7 @@ import retrofit2.http.POST
 interface HTTPRequestsInterface
 {
     @POST("/createUser")
-    suspend fun createUser(@Body credentials: RegLogDataClass)
+    suspend fun createUser(@Body credentials: RegLogDataClass): Response<LoginUserIDDataClass>
 
     @POST("/loginUser")
     suspend fun loginUser(@Body credentials: RegLogDataClass): Response<LoginUserIDDataClass>
